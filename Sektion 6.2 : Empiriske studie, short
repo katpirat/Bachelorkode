@@ -1,0 +1,150 @@
+rm(list=ls())
+
+optionsdata <- read.table("https://raw.githubusercontent.com/LaursLeth/math_econ_bachelor_2020/master/data/Optionsdata.txt", header = TRUE)
+
+# Brugte funktioner 
+
+d1 <- function(S,K,r,q,sigma,tau){
+  (log(S/K)+(r-q)*tau + 1/2*sigma^2*tau)/(sigma*sqrt(tau))
+} 
+d2 <- function(S,K,r,q,sigma,tau){
+  d1(S,K,r,q,sigma,tau) - sigma*sqrt(tau)
+}
+
+C <- function(S,K,r,sigma,q,tau,option="Call"){
+  d1 <- d1(S,K,r,q,sigma,tau)
+  d2 <- d2(S,K,r,q,sigma,tau)
+  
+  if (option=="Call"){
+    result <- exp(-q*tau)*S*pnorm(d1) - K*exp(-r*tau)*pnorm(d2)
+  }
+  
+  if (option=="Put"){
+    result <-  exp(-q*tau)*S*pnorm(d1) - K*exp(-r*tau)*pnorm(d2) -exp(-q*tau)*S + K*exp(-r*tau)
+  }
+  result
+}
+
+C <- Vectorize(C)
+
+BS.delta <- function(S, K, r, q,  sigma, tau, option = "Call"){
+  if (option == "Call"){
+    result <-  exp(-q*tau)*pnorm(d1(S,K,r,q,sigma,tau))
+  }
+}
+BS.delta <- Vectorize(BS.delta)
+
+# Delta hedge 
+
+delta_hedge_error <- function(S,K,r,q,sigma, tau, call_price, strategy=-1,option="Call"){
+  
+  delta   <- BS.delta(S=S,K=K,r=r,q=q, sigma=sigma,tau=tau, option=option)
+  
+  n            <- length(S[-length(S)])
+  V            <- numeric(n+1); V[1] <- call_price[1] # Value process 
+  Pi           <- numeric(n+1);Pi[1]  <- 0  ### Path of PL/Hedging Error
+  dPi          <- numeric(n+1);dPi[1] <- 0  ### Hedging error over time interval
+  
+  if (length(r)==1){r<-rep(r,n)}
+  if (length(q)==1){q<-rep(q,n)}
+  
+  for (i in 1:n){
+    B       <- Pi[i] + strategy*delta[i]*S[i] - strategy*call_price[i] # Rebalance with money account
+    V[i+1] <- exp(r[i]*dt)*B - strategy*delta[i]*exp(q[i]*dt)*S[i+1] # Mark-to-market for portfolio
+    Pi[i+1] <- V[i+1] + strategy*call_price[i+1] # Mark-to-market for adjusted portfolio/cumulated hedging error
+    dPi[i+1] <- Pi[i+1] - Pi[i] # 
+  }
+  output=list(pf_value= V, error_cum = Pi, error_dt = dPi) # Save output
+}
+
+
+res_imp <- matrix(NA, ncol = 37, nrow = 63)
+res_rv5 <- matrix(NA, ncol = 37, nrow = 63)
+res_dpi_imp <- matrix(NA, ncol = 37, nrow = 63)
+res_dpi_rv5 <- matrix(NA, ncol = 37, nrow = 63)
+
+
+# Always short.
+for (i in 1:37){
+  mid_data <- subset(optionsdata, Option == i)
+  
+  dt <- diff(mid_data$t)[1]
+  
+  res_imp[,i] <- delta_hedge_error(S = mid_data$S, K = mid_data$K, r = mid_data$r, q = mid_data$q, sigma = mid_data$sigma, tau = mid_data$tau, call_price = mid_data$C, strategy = -1, option = "Call")[[2]]
+  
+  res_rv5[,i] <- delta_hedge_error(S = mid_data$S, K = mid_data$K, r = mid_data$r, q = mid_data$q, sigma = mid_data$rv5, tau = mid_data$tau, call_price = mid_data$C, strategy = -1, option = "Call")[[2]]
+  
+  res_dpi_imp[,i] <- delta_hedge_error(S = mid_data$S, K = mid_data$K, r = mid_data$r, q = mid_data$q, sigma = mid_data$sigma, tau = mid_data$tau, call_price = mid_data$C, strategy = -1, option = "Call")[[3]]
+  
+  res_dpi_rv5[,i] <- delta_hedge_error(S = mid_data$S, K = mid_data$K, r = mid_data$r, q = mid_data$q, sigma = mid_data$rv5, tau = mid_data$tau, call_price = mid_data$C, strategy = -1, option = "Call")[[3]]
+}
+
+t.test(res_imp[63, 1:37], var.equal = TRUE, mu = 0) # t.test for implied
+
+t.test(res_rv5[63, 1:37], var.equal = TRUE, mu = 0) # t.test for rv5
+
+sd(res_imp[63, 1:37]) # sd for P&L_63, implied 
+
+sd(res_rv5[63,1:37])# sd for P&L_63, rv5 
+
+sd(colSums((res_dpi_imp)^2)/63) # sd for QV for imp hedgen
+
+sd(colSums((res_dpi_rv5)^2)/63) # sd for QV for rv5 hedgen
+
+mean(colSums(res_dpi_imp^2)/63) # mean of quad-var for imp_vol
+
+mean(colSums(res_dpi_rv5^2)/63)# mean of quad-var for rv5_vol
+
+mean_imp <- rowMeans(res_imp)[63] # Mean of cummulated error with dividends for imp
+
+mean_rv5 <- rowMeans(res_rv5)[63] # Mean of cummulated error with dividends for rv5
+
+# Variance tests. 
+
+var.test(res_imp[nrow(res_imp),],res_rv5[nrow(res_rv5),]) # Ja, p-værdi er lig 0.68
+
+# test for quad-var.
+
+t.test(colMeans((res_dpi_imp)^2), colMeans((res_dpi_rv5)^2)) #  
+
+var.test(colMeans((res_dpi_imp)^2),colMeans((res_dpi_rv5)^2)) # er QV_imp =QV_rv5? Nej, p-værdi på 2*10^(-16) 
+
+res_imp <- as.data.frame(res_imp)
+res_rv5 <- as.data.frame(res_rv5)
+res_dpi_imp <- as.data.frame(res_dpi_imp)
+res_dpi_rv5 <- as.data.frame(res_dpi_rv5)
+
+res_imp$Time <- optionsdata$t[1:63]
+res_rv5$Time <- optionsdata$t[1:63]
+res_imp_melt <- melt(res_imp, id = "Time")
+res_rv5_melt <- melt(res_rv5, id = "Time")
+
+
+ggplot(res_rv5_melt, aes(x = Time, y = value, color = variable)) + geom_line(size = 0.5) + 
+  xlab("tid") +
+  ylab("Hedge_error_cum") +
+  ggtitle("hedge med RV5")
+
+ggplot(res_imp_melt, aes(x = Time, y = value, color = variable)) + geom_line(size = 0.5) + 
+  xlab("tid") +
+  ylab("Hedge_error_cum") +
+  ggtitle("hedge med imp")
+
+
+
+# Optionernes delta
+
+hedge_delta <- matrix(NA, ncol = 20, nrow = 63)
+for ( i in 1:20){
+  mid_data <- subset(optionsdata, Option == i)
+  
+  hedge_delta[,i] <- BS.delta(S = mid_data$S, K = mid_data$K, r = mid_data$r, q = mid_data$q, sigma = mid_data$rv5, tau = mid_data$tau, option = "Call")
+}
+hedge_delta <- as.data.frame(hedge_delta)
+hedge_delta$Time <- optionsdata$t[1:63]
+hedge_delta <- melt(hedge_delta, id = "Time")
+ggplot(hedge_delta, aes(x = Time, y = value, color = variable)) + geom_line(size = 0.5) + 
+  xlab("Time") +
+  ylab("delta") +
+  ggtitle("Delta for optionerne for RV5")
+
