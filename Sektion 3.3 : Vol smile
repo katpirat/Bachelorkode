@@ -1,0 +1,14 @@
+calls <- read.csv(file="~/Desktop/Vol_smile_data/AAPL_calls.csv", stringsAsFactors = FALSE)
+head(calls)
+
+calls$Implied.Volatility <- as.numeric(gsub('%','',calls$Implied.Volatility))
+calls$Open.Interest <- as.numeric(gsub(',','',calls$Open.Interest))
+
+S = 209.68
+
+par(mfrow=c(2,2))
+ 
+#Plot Implied Volatility vs Strike Prices
+ 
+plot(calls$Strike, calls$Implied.Volatility, type="p", col="red", pch = 19,
+main=c("02 Aug 2019 Calls", "Volatility Smile"), xlab="Strike", ylab="Implied Vol")
