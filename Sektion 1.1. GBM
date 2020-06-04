@@ -1,0 +1,19 @@
+set.seed(1)
+
+S0 <- 100
+S <- 100
+mu <- 0.1
+sigma <- 0.1
+T <- 1
+n <- 1000
+dt <- T/(n)
+time <- seq(0,T, length = (n+1))
+S_vec1 <- numeric(n+1)
+S_vec1[1] <- S
+for (i in 1:n){
+  Z <- rnorm(1, mean = 0, sd = 1)
+  dS <- mu * S * dt + sigma * S * sqrt(dt) * Z # Z \sim N(0, \delta t) = sqrt(\delta t) N(0,1)
+  S <- S + dS
+  S_vec1[i+1] <- S
+}
+plot(time, S_vec1, type = "l")
