@@ -1,0 +1,98 @@
+rm(list = ls())
+
+d1 <- function(S,K,r,q,sigma,tau){(log(S/K)+(r-q)*tau + 1/2*sigma^2*tau)/(sigma*sqrt(tau))}
+d2 <- function(S,K,r,q,sigma,tau){d1(S,K,r,q,sigma,tau) - sigma*sqrt(tau)}
+C_BS <- function(S,K,r,q,sigma,tau,option="Call"){
+  d1 <- d1(S,K,r,q,sigma,tau)
+  d2 <- d2(S,K,r,q,sigma,tau)
+  if (option=="Call"){result <- exp(-q*tau)*S*pnorm(d1) - K*exp(-r*tau)*pnorm(d2)}
+  if (option=="Put"){ result <-  exp(-q*tau)*S*pnorm(d1) - K*exp(-r*tau)*pnorm(d2) -exp(-q*tau)*S + K*exp(-r*tau)}
+  result
+  }
+C_BS <- Vectorize(C_BS)
+BS.delta <- function(S,K,r,q,sigma,tau,option="Call"){
+  if (option == "Call"){ result <-  exp(-q*tau)*pnorm(d1(S,K,r,q,sigma,tau))}
+  if (option == "Put"){ result <-  exp(-q*tau)*(pnorm(d1(S,K,r,q,sigma,tau))-1)}
+  result
+}
+BS.delta <- Vectorize(BS.delta)
+BS.Gamma <- function(S,K,r,q,sigma,tau,option="Call"){
+  if (option == "Call"){ result <-  exp(-q*tau)/(S*sigma*tau)*dnorm(d1(S,K,r,q,sigma,tau))}
+  if (option == "Put"){result <-  exp(-q*tau)/(S*sigma*tau)*dnorm(d1(S,K,r,q,sigma,tau))}
+  result
+}
+BS.Gamma <- Vectorize(BS.Gamma)
+delta_hedge_error <- function(S,K,r,q,sigma, tau, call_price, strategy=-1,option="Call"){
+  
+  delta   <- BS.delta(S=S,K=K,r=r,q=q, sigma=sigma,tau=tau, option=option)
+  
+  n            <- length(S[-length(S)])
+  V            <- numeric(n+1); V[1] <- call_price[1] # Value process 
+  Pi           <- numeric(n+1);Pi[1]  <- 0  ### Path of PL/Hedging Error
+  dPi          <- numeric(n+1);dPi[1] <- 0  ### Hedging error over time interval
+  
+  if (length(r)==1){r<-rep(r,n)}
+  if (length(q)==1){q<-rep(q,n)}
+  
+  for (i in 1:n){
+    B       <- Pi[i] + strategy*delta[i]*S[i] - strategy*call_price[i] # Rebalance with money account
+    V[i+1] <- exp(r[i]*dt)*B - strategy*delta[i]*exp(q[i]*dt)*S[i+1] # Mark-to-market for portfolio
+    Pi[i+1] <- V[i+1] + strategy*call_price[i+1] # Mark-to-market for adjusted portfolio/cumulated hedging error
+    dPi[i+1] <- Pi[i+1] - Pi[i] # 
+  }
+  output=list(pf_value= V, error_cum = Pi, error_dt = dPi) # Save output
+}
+
+# parametre
+S0 <- 100
+mu <- 0.1
+sigma_true <- 0.2
+sigma_imp <- 0.3
+r <- 0.05
+K <- 100
+T <- 1
+
+# Time grid
+N <- 10000                # antal gange pf er rebalanceret
+t <- seq(0,T,length=N+1) # N intervals
+tau <- T -t 
+dt <- 1/N   # Equidistant time step for each simulated path
+
+
+##### 10 stier med sigma_h = sigma_true
+error <- matrix(NA, nrow = N+1, ncol = 10)
+for (i in 1:10){
+  Z <- rnorm(N, mean=0, sd=1)
+  X <- cumsum((mu-1/2*sigma_true^2)*dt + sigma_true*sqrt(dt)*Z) 
+  S <- c(S0,S0*exp(X))
+  C <- C_BS(S=S, K=K, r=r,q=0, sigma=sigma_imp,tau=tau)
+  error[,i] <- delta_hedge_error(S=S,K=K,r=r,q=0,sigma=sigma_true, tau=tau, call_price=C, strategy=-1,option="Call")[[2]]
+}
+df <- as.data.frame(error)
+df$time <- t
+
+df_melt <- melt(df, id = "time")
+
+ggplot(df_melt, aes(x = time, y = value, color = variable)) + geom_line(size = 0.5) + 
+  ggtitle("hedge med real vol") +  
+  xlab("time") +
+  ylab("P&L")
+
+
+for (i in 1:10){
+  Z <- rnorm(N, mean = 0,sd = 1)
+  X <- cumsum((mu-1/2*sigma_true^2)*dt + sigma_true*sqrt(dt)*Z) 
+  S <- c(S0,S0*exp(X))
+  C <- C_BS(S=S, K=K, r=r,q=0, sigma=sigma_imp,tau=tau)
+  error[,i] <- delta_hedge_error(S=S,K=K,r=r,q=0,sigma=sigma_imp, tau=tau, call_price=C, strategy=-1,option="Call")[[2]]
+}
+
+df <- as.data.frame(error)
+df$time <- t
+
+df_melt <- melt(df, id = "time")
+
+ggplot(df_melt, aes(x = time, y = value, color = variable)) + geom_line(size = 0.5) + 
+  ggtitle("Hedge med imp vol") + 
+  xlab("time") +
+  ylab("P&L")
