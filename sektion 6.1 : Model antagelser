@@ -1,0 +1,118 @@
+rm(list =ls())
+
+require(ggplot2)
+require(reshape2)
+# Funktioner der bruges 
+
+
+optionsdata <- read.table("https://raw.githubusercontent.com/LaursLeth/math_econ_bachelor_2020/master/data/Optionsdata.txt", header = TRUE)
+
+
+
+
+
+
+
+# Model antagelser om log-afkast er norm-fordelt. Log-afkastet udregnes 
+
+df_stock <- optionsdata[, c('Date', 'S')]
+head(df_stock)
+
+dummy_start <- which(df_stock$Date == '2004-04-01') + 1
+df_stock <- df_stock[dummy_start:nrow(df_stock), ]
+
+
+years <- as.character(2004:2013)
+breakVec<- c(1)
+N <- 0
+for (i in 1:(length(years)-1)){
+  year <- years[i]
+  n <- sum(format(as.Date(as.character(df_stock$Date)),"%Y")==year)
+  breakVec <- c(breakVec,breakVec[i] + n)
+}
+
+
+labelVec <- as.character(df_stock[breakVec,]$Date)
+
+## Include break and label for last observation
+breakVec <- c(breakVec,nrow(df_stock))
+labelVec <- c(labelVec,as.character(tail(df_stock,1)[1,1]))
+
+
+df_stock$dummy <- 1:nrow(df_stock)
+
+# Daily log-returns
+
+p1 <- ggplot(data=df_stock,aes(x=1:nrow(df_stock),y=S)) + 
+  scale_x_continuous(breaks=breakVec,labels=labelVec) +
+  geom_point() + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ggtitle("Daily Values for SP500 Index")+
+  xlab("Date") +
+  ylab("Value") +
+  theme(plot.title = element_text(lineheight=0.8) # face="bold"
+        ,axis.text.x = element_text(angle = 45, hjust = 1,vjust=1))
+
+p1
+
+
+df_stock_returns <- data.frame(Date = optionsdata$Date[-1], Close = diff(log(optionsdata$S)))
+
+df_stock_returns$x <- df_stock_returns$Close/sd(df_stock_returns$Close) # Standardized log-returns
+
+
+df_stock_returns <- data.frame(Date = df_stock$Date[-1], Close = diff(log(df_stock$S)))
+df_stock_returns$x <- df_stock_returns$Close/sd(df_stock_returns$Close) # Standardized log-returns
+
+breakVec_returns <- breakVec -1
+breakVec_returns[1] <- 1
+labelVec_returns <- as.character(df_stock_returns[breakVec_returns,]$Date)
+
+df_stock_returns$panel <- "Daily Log-Returns"
+p2 <- ggplot(data=df_stock_returns,aes(x=1:nrow(df_stock_returns),y=Close)) + geom_point(size=1) +
+  scale_x_continuous(breaks=breakVec_returns,labels=labelVec_returns) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ggtitle("Daily Log-Returns for SP500 Index")+
+  xlab("Date") +
+  ylab("Value") +
+  theme(plot.title = element_text(lineheight=0.8) # face="bold"
+        ,axis.text.x = element_text(angle = 45, hjust = 1,vjust=1))
+
+p2
+
+# Histogram of log-returns
+
+
+p_hist <- ggplot(data=df_stock_returns,aes(x=x)) + 
+  geom_histogram(aes(y = ..density..), binwidth=0.1, position="identity",alpha=.5,color="black") +
+  stat_function(fun = dnorm, 
+                args = list(mean = 0, sd = 1),
+                aes(color="normal"),size=0.5)+
+  scale_colour_manual("Density", values = c("red") )+
+  theme(legend.position="bottom") +
+  xlab("standardized price changes") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ggtitle("Histogram of Standardized Daily Price Changes") 
+
+p_hist
+
+p_qq <- ggplot(df_stock_returns, aes(sample = x)) + 
+  stat_qq() + 
+  stat_qq_line() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ggtitle("Histogram of Standardized Daily Price Changes") 
+
+p_qq
+
+
+
+
+# Plot volatilitet og SP500 indexet 
+
+newdata <- data.frame("SP500" = optionsdata$S, "rv5" = optionsdata$rv5, "imp" = optionsdata$sigma)
+
+newdata2 <- data.frame("rv5" = optionsdata$rv5, "imp" = optionsdata$sigma)
+
+plot.ts(newdata$SP500)
+
+ts.plot(newdata2,gpars= list(col=c("red", "blue")))
