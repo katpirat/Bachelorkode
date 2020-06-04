@@ -1,0 +1,40 @@
+library(quantmod)
+env_sp500 <- new.env()
+
+getSymbols("^GSPC", env = env_sp500 , src = "yahoo", from = as.Date("2004-01-02"), to = as.Date("2007-12-30"), warnings = F)
+
+sp500 <- env_sp500$GSPC
+sp500 <- data.frame(date = index(sp500), coredata = (sp500))
+
+plot(sp500$date, sp500$coredata.GSPC.Close, type = "l")
+
+qplot(sp500$date, sp500$coredata.GSPC.Close, alpha = 2) + geom_smooth(method = "lm") + xlab("")
+dim(sp500)
+log_afkast <- data.frame(date = sp500$date, lukkepris = sp500$coredata.GSPC.Close, log_afkast = NA)
+
+for (i in 1:1005){
+  log_afkast$log_afkast[i] <- log((log_afkast$lukkepris[i+1])/(log_afkast$lukkepris[i]))
+}
+
+qplot(log_afkast$date, log_afkast$log_afkast, alpha = 2) + geom_smooth(method = "lm") + xlab("Date") + ylab("Log-afkast")
+
+qqnorm(log_afkast$log_afkast, pch = 1, frame = FALSE)
+qqline(log_afkast$log_afkast, col = "steelblue", lwd = 2)
+
+
+
+env_nash <- new.env()
+getSymbols("^IXIC",  env = env_nash, src = "yahoo", from = as.Date("2015-01-02"), to = as.Date("2019-12-30"), warnings = F)
+
+env_nash <- env_nash$IXIC
+nash <- data.frame(date = index(env_nash), coredata = (env_nash))
+
+plot(nash$date, nash$coredata.IXIC.Close)
+
+qplot(nash$date, nash$coredata.IXIC.Close, alpha = 2) + geom_smooth(method= "lm") + xlab("")
+
+nash$log_afkast = NA
+for ( i in 1 : (dim(nash)[1]-1)){
+  nash$log_afkast[i] <- log((nash$coredata.IXIC.Close[i+1])/(nash$coredata.IXIC.Close[i]))
+}
+qplot(date, log_afkast, data = nash, aes(x=1:nrow(nash),y=log_afkast))
